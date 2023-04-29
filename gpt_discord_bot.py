@@ -18,6 +18,10 @@ class MyClient(discord.Client):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print('------')
     
+    async def on_guild_join(self, guild):
+        owner = guild.owner
+        await owner.send("Thanks for inviting Enspriedjack AI! Please use the `!setchannel` command in the desired channel to set the channel where the bot should listen and respond.")
+
 
     async def on_message(self, message):
         global conversation
@@ -30,13 +34,11 @@ class MyClient(discord.Client):
             system_message[server_id] = [{"role": "system", "content": "You are a discord bot called Enspiredjack AI. \"\<\:teethPepe\:753266605173112892\>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time}]
         if message.author == client.user:
             return
-        if message.content.startswith('!setchannel'):
-            chosen_channels[server_id] = message.channel.id
-            save_chosen_channels(chosen_channels)
-            await message.channel.send(f"Bot will now only listen and respond in <#{message.channel.id}>.")
-            return
         if server_id not in chosen_channels:
-            await message.channel.send("Please set a channel using !setchannel in the channel you want the AI to talk in.")
+            if message.content.startswith('!setchannel'):
+                chosen_channels[server_id] = message.channel.id
+                save_chosen_channels(chosen_channels)
+                await message.channel.send(f"Bot will now only listen and respond in <#{message.channel.id}>.")
             return
         if message.channel.id != chosen_channels[server_id]:
             return
