@@ -7,6 +7,15 @@ from openai.error import OpenAIError
 def split_string(string, chunk_size):
     return [string[i:i+chunk_size] for i in range(0, len(string), chunk_size)]
 
+def gettimeinfo():
+    now = datetime.datetime.now()
+    formatted_time = now.strftime("%H:%M:%S")
+    return formatted_time
+
+def getdateinfo():
+    now = datetime.datetime.now()
+    formatted_date = now.strftime("%Y-%m-%d")
+    return formatted_date
 
 class MyClient(discord.Client):
 
@@ -30,6 +39,8 @@ class MyClient(discord.Client):
         global chosen_channels
         server_id = str(message.guild.id)
         if server_id not in conversation:
+            formatted_time = gettimeinfo()
+            formatted_date = getdateinfo()
             conversation[server_id] = []
             system_message[server_id] = [{"role": "system", "content": "You are a discord bot called Enspiredjack AI. \"\<\:teethPepe\:753266605173112892\>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time}]
             ex_prompt[server_id] = 0
@@ -93,14 +104,14 @@ class MyClient(discord.Client):
         user = message.content
         #print(user)
         #send conversation to gpt-3 api
-        conversation.append({"role": "user", "content": author_name + ": " + user})
+        conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
         #print(conversation)
-        print(system_message + conversation)
+        #print(system_message + conversation)
         try:
             async with message.channel.typing():
                 completion = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
-                    messages=system_message + conversation
+                    messages=system_message[server_id] + conversation[server_id]
                 )
         except OpenAIError as e:
             await message.channel.send(f"Error: {str(e)}")
@@ -124,15 +135,6 @@ class MyClient(discord.Client):
         if len(conversation[server_id]) > MAX_CONVERSATION_LENGTH:
             conversation[server_id] = conversation[server_id][-MAX_CONVERSATION_LENGTH:]
 
-def gettimeinfo():
-    now = datetime.datetime.now()
-    formatted_time = now.strftime("%H:%M:%S")
-    return formatted_time
-
-def getdateinfo():
-    now = datetime.datetime.now()
-    formatted_date = now.strftime("%Y-%m-%d")
-    return formatted_date
 
 #Initialise the array for the api calls globally
 conversation = {}
@@ -141,7 +143,6 @@ chosen_channels = {}
 formatted_time = gettimeinfo()
 formatted_date = getdateinfo()
 ex_prompt = {}
-system_message.append({"role": "system", "content": "You are a discord bot called Enspiredjack AI. \"\<\:teethPepe\:753266605173112892\>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time})
 
 def load_chosen_channels():
     try:
