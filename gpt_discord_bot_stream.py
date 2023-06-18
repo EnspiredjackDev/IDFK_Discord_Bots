@@ -22,15 +22,16 @@ class MyClient(discord.Client):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.queue = asyncio.Queue()
-        self.chat_completion_finished = False
+        self.message_queues = {}
+        self.processing_messages = {}
 
-    async def fetch_chunks(self):
-        global server_id
-        global conversation_so_far
+    async def fetch_chunks(self, server_id):
+        global conversation
+        global system_message
         global endresult
         global error
-        self.chat_completion_finished = False
+        self.processing_messages[server_id] = True
+        self.message_queues[server_id] = asyncio.Queue()
         try:
             openai.api_key = 'OPENAI-API-KEY'
             chat_completions = await openai.ChatCompletion.acreate(
@@ -39,29 +40,30 @@ class MyClient(discord.Client):
                 stream=True,
             )
         except OpenAIError as e:
-            error =  f"Error: {str(e)}"
+            error = f"Error: {str(e)}"
             return
         async for chunk in chat_completions:
             content = chunk["choices"][0].get("delta", {}).get("content")
             if content is not None:
                 endresult += content
-                await self.queue.put(content)
+                await self.message_queues[server_id].put(content)
             finish_reason = chunk["choices"][0].get("finish_reason")
             if finish_reason == "stop":
-                self.chat_completion_finished = True
+                self.processing_messages[server_id] = False
                 conversation[server_id].append({"role": "assistant", "content": endresult})
                 print(conversation[server_id])
 
-    async def update_message(self, message):
-        global conversation_so_far
+    async def update_message(self, message, server_id):
+        global conversation
+        global system_message
         conversation_so_far = ""
-        while not self.chat_completion_finished or not self.queue.empty():
-            while not self.queue.empty():
-                conversation_so_far += await self.queue.get()
+        while self.processing_messages[server_id] or not self.message_queues[server_id].empty():
+            while not self.message_queues[server_id].empty():
+                conversation_so_far += await self.message_queues[server_id].get()
             if conversation_so_far:
                 if error:
-                    message.channel.send(error)
-                    self.chat_completion_finished = True
+                    await message.channel.send(error)
+                    self.processing_messages[server_id] = False
                     return
                 # Split the content into chunks of 2000 characters each
                 while len(conversation_so_far) > 2000:
@@ -79,8 +81,8 @@ class MyClient(discord.Client):
         print('------')
     
     async def on_guild_join(self, guild):
-        owner = guild.owner
-        await owner.send("Thanks for inviting Enspriedjack AI! Please use the `!setchannel` command in the desired channel to set the channel where the bot should listen and respond.")
+        channel = guild.text_channels[0]
+        await channel.send("Thanks for inviting Enspriedjack AI! Please use the `!setchannel` command in the desired channel to set the channel where the bot should listen and respond.")
 
 
     async def on_message(self, message):
@@ -92,6 +94,9 @@ class MyClient(discord.Client):
         global server_id
         global endresult
         server_id = str(message.guild.id)
+        if server_id not in self.message_queues:
+            self.message_queues[server_id] = asyncio.Queue()
+            self.processing_messages[server_id] = False
         if server_id not in conversation:
             formatted_time = gettimeinfo()
             formatted_date = getdateinfo()
@@ -165,6 +170,14 @@ class MyClient(discord.Client):
             return
         if message.content.startswith('__'):
             return
+        if self.processing_messages[server_id]:
+            wait_message = await message.reply("Generating a response. Please wait and try again. Your prompt has been retained in memory.", mention_author=True)
+            author_name = message.author.name
+            user = message.content
+            conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+            await asyncio.sleep(5)
+            await wait_message.delete()
+            return
         #update date and time
         formatted_time = gettimeinfo()
         formatted_date = getdateinfo()
@@ -180,18 +193,15 @@ class MyClient(discord.Client):
         initial_message = await message.channel.send('Generating response...')
         endresult = ""
         # Start the two tasks
-        fetch_task = asyncio.create_task(self.fetch_chunks())
-        update_task = asyncio.create_task(self.update_message(initial_message))
+        fetch_task = asyncio.create_task(self.fetch_chunks(server_id))
+        update_task = asyncio.create_task(self.update_message(initial_message, server_id))
         # Wait for both tasks to complete
         await fetch_task
         await update_task
         if len(conversation[server_id]) > MAX_CONVERSATION_LENGTH:
             conversation[server_id] = conversation[server_id][-MAX_CONVERSATION_LENGTH:]
 
-        
-
-
-#Initialise the array for the api calls globally
+# Initialise the array for the API calls globally
 conversation = {}
 system_message = {}
 chosen_channels = {}
@@ -215,15 +225,16 @@ def save_chosen_channels(chosen_channels):
     with open("chosen_channels.json", "w") as f:
         json.dump(chosen_channels, f)
 
-#load if able
+# Load if able
 chosen_channels = load_chosen_channels()
 
-# Maximum number of messages to keep in conversation history (still doesnt account for long messages and may go over the token limit)
+# Maximum number of messages to keep in conversation history (still doesn't account for long messages and may go over the token limit)
 MAX_CONVERSATION_LENGTH = 20
 
-#Discord stuff
+# Discord stuff
 intents = discord.Intents.default()
 intents.message_content = True
+intents.guilds = True
 
 client = MyClient(intents=intents)
 client.run("DISCORD-BOT-TOKEN")
