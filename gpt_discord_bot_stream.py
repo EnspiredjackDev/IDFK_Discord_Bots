@@ -1,9 +1,8 @@
 import json
 import discord
-import openai
 import datetime
 import asyncio
-from openai.error import OpenAIError
+from openai import AsyncOpenAI
 
 def split_string(string, chunk_size):
     return [string[i:i+chunk_size] for i in range(0, len(string), chunk_size)]
@@ -24,6 +23,7 @@ class MyClient(discord.Client):
         super().__init__(*args, **kwargs)
         self.message_queues = {}
         self.processing_messages = {}
+        self.openai_client = AsyncOpenAI(api_key='OPENAI-API-KEY')
 
     async def fetch_chunks(self, server_id):
         global conversation
@@ -33,21 +33,26 @@ class MyClient(discord.Client):
         self.processing_messages[server_id] = True
         self.message_queues[server_id] = asyncio.Queue()
         try:
-            openai.api_key = 'OPENAI-API-KEY'
-            chat_completions = await openai.ChatCompletion.acreate(
+            chat_completions = await self.openai_client.chat.completions.create(
                 model=selected_models[server_id],
                 messages=system_message[server_id] + conversation[server_id],
                 stream=True,
             )
-        except OpenAIError as e:
+        except AsyncOpenAI.APIConnectionError as e:
+            error = f"Error: {str(e)}"
+            return
+        except AsyncOpenAI.RateLimitError as e:
+            error = f"Error: {str(e)}"
+            return
+        except AsyncOpenAI.APIStatusError as e:
             error = f"Error: {str(e)}"
             return
         async for chunk in chat_completions:
-            content = chunk["choices"][0].get("delta", {}).get("content")
-            if content is not None:
+            content = chunk.choices[0].delta.content or ""
+            if content:
                 endresult += content
                 await self.message_queues[server_id].put(content)
-            finish_reason = chunk["choices"][0].get("finish_reason")
+            finish_reason = chunk.choices[0].finish_reason
             if finish_reason == "stop":
                 self.processing_messages[server_id] = False
                 conversation[server_id].append({"role": "assistant", "content": endresult})
