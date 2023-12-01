@@ -17,3 +17,7 @@ Just counts how many times the n-word is said, good for toxic servers i guess. (
 
 ## AI image bot  
 Uses DALL-E 2 image api to generate images when someone says !generateimage prompt (changable) (Not updated to latest version of OAI lib) 
+
+## Prerequisits
+Make sure you have openai and discord installed via pip
+`pip install openai discord`
