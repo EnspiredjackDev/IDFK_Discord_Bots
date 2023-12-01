@@ -4,7 +4,7 @@ All the bots running on the IDFK discord server that ive made
 These bots are very basic and just me messing about.  
 
 ## GPT bot  
-This bot gets every message from the server and replies to it, adding the conversation to the memory, configure how long you want the memory by changing the `MAX_CONVERSATION_LENGTH` to something else. Conversation does not include the system message, it will not be deleted. This is the single message respose version, it will send a message once openai's API has responded. (Not updated to latest version of OAI lib)  
+This bot gets every message from the server and replies to it, adding the conversation to the memory, configure how long you want the memory by changing the `MAX_CONVERSATION_LENGTH` to something else. Conversation does not include the system message, it will not be deleted. This is the single message respose version, it will send a message once openai's API has responded.  
 
 ## GPT bot stream  
 This is the same as above but it will send a message and then continuously edit that message until the response is fully added.  

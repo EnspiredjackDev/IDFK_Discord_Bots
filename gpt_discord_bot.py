@@ -1,8 +1,7 @@
 import json
 import discord
-import openai
+from openai import AsyncOpenAI
 import datetime
-from openai.error import OpenAIError
 
 def split_string(string, chunk_size):
     return [string[i:i+chunk_size] for i in range(0, len(string), chunk_size)]
@@ -22,6 +21,7 @@ class MyClient(discord.Client):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.openai_client = AsyncOpenAI(api_key='OPENAI-API-KEY')
     
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -119,8 +119,6 @@ class MyClient(discord.Client):
             system_message[server_id][-2]["content"] = "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time
         else:
             system_message[server_id][-1]["content"] = "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time
-        #openAI api key
-        openai.api_key = "OPENAI-API-KEY"
         #get prompt
         author_name = message.author.name
         user = message.content
@@ -128,18 +126,22 @@ class MyClient(discord.Client):
         conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
         try:
             async with message.channel.typing():
-                completion = openai.ChatCompletion.create(
+                completion = await self.openai_client.chat.completions.create(
                     model=selected_models[server_id],
                     messages=system_message[server_id] + conversation[server_id]
                 )
-        except OpenAIError as e:
+        except AsyncOpenAI.APIConnectionError as e:
             await message.channel.send(f"Error: {str(e)}")
             return
-
+        except AsyncOpenAI.RateLimitError as e:
+            await message.channel.send(f"Error: {str(e)}")
+            return
+        except AsyncOpenAI.APIStatusError as e:
+            await message.channel.send(f"Error: {str(e)}")
+            return
+        
         #extract what gpt replies with, append it to the array and say it in chat
-        forjson = str((completion.choices[0].message))
-        response_dict = json.loads(forjson)
-        content = response_dict["content"]
+        content = completion.choices[0].message.content
         conversation[server_id].append({"role": "assistant", "content": content})
         #Make sure the response doesn't go over the discord character limit
         if len(content) > 2000:
@@ -184,4 +186,4 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 client = MyClient(intents=intents)
-client.run("DISCORD-TOKEN")
+client.run("DISCORD-BOT-TOKEN")
