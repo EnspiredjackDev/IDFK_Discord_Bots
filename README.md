@@ -21,3 +21,5 @@ Uses DALL-E 2 image api to generate images when someone says !generateimage prom
 ## Prerequisits
 Make sure you have openai and discord installed via pip
 `pip install openai discord`
+
+Get a API token at [OpenaAI](https://platform.openai.com)
