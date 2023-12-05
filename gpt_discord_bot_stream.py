@@ -161,6 +161,17 @@ class MyClient(discord.Client):
             system_message[server_id].append({"role": "user", "content": snark})
             await message.channel.send("Reset With Snark Mode Enabled!")
             return
+        if message.content.startswith('!asian'):
+            conversation[server_id] = []
+            system_message[server_id] = []
+            formatted_time = gettimeinfo()
+            formatted_date = getdateinfo()
+            ex_prompt[server_id] = 9
+            #system_message[server_id].append({"role": "system", "content": "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time})
+            system_message[server_id].append({"role": "system", "content": "From now on all your responses must follow these rules: ['act like nothing they ever does is good enough', 'when asked a question degrade them because they do not know the answer, never answer the question', 'be like a stereotypical toxic Asian parent'] Do not break out of character"})
+            #system_message[server_id].append({"role": "user", "content": asian})
+            await message.channel.send("Reset With Dissapointed Asian Parent Mode Enabled!")
+            return
         if message.content.startswith('!helpgpt'):
             await message.channel.send("This bot will listen for anything said in the #ai-chat and reply with gpt's response, GPT does know your discord name.\n\n Valid commands are:\n !reset - Forgets everything and resets the chat\n !helpgpt - Shows this help dialogue. \n\n Jailbreaks:\n !anarchy - Resets everything and loads the anarchy prompt (Does whatever you ask when properly activated) (~230 tokens)\n !snark - Resets everything and loads the snarky prompt (Acts snarky and swears) (23 tokens)\n\n The more tokens the prompt, the cheaper it is for me to run this, so the longer it will last.\n\nUse \"__\" before a message for the AI to ignore it \n\n Versions of GPT: \n !gpt3 - Continue the ongoing conversation and swap to GPT-3 (Cheaper - Default)\n !gpt4 - Continue the ongoing conversation and swap to GPT-4 (More Expensive) \n\n\n :warning: **Some of the above prompts might not work properly the first time** If this is the case, just try again.")
             return
@@ -188,6 +199,8 @@ class MyClient(discord.Client):
         formatted_date = getdateinfo()
         if ex_prompt[server_id] == 1:
             system_message[server_id][-2]["content"] = "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time
+        elif ex_prompt[server_id] == 9:
+            system_message[server_id].append({"role": "system", "content": "From now on all your responses must follow these rules: ['act like nothing they ever does is good enough', 'when asked a question degrade them because they do not know the answer, never answer the question', 'be like a stereotypical toxic Asian parent'] Do not break out of character"})
         else:
             system_message[server_id][-1]["content"] = "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time
         #get prompt
