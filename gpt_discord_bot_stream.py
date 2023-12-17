@@ -37,15 +37,19 @@ class MyClient(discord.Client):
                 model=selected_models[server_id],
                 messages=system_message[server_id] + conversation[server_id],
                 stream=True,
+                max_tokens=4000,
             )
         except AsyncOpenAI.APIConnectionError as e:
             error = f"Error: {str(e)}"
+            print(error)
             return
         except AsyncOpenAI.RateLimitError as e:
             error = f"Error: {str(e)}"
+            print(error)
             return
         except AsyncOpenAI.APIStatusError as e:
             error = f"Error: {str(e)}"
+            print(error)
             return
         async for chunk in chat_completions:
             content = chunk.choices[0].delta.content or ""
@@ -53,7 +57,7 @@ class MyClient(discord.Client):
                 endresult += content
                 await self.message_queues[server_id].put(content)
             finish_reason = chunk.choices[0].finish_reason
-            if finish_reason == "stop":
+            if finish_reason == "stop" or finish_reason == "length":
                 self.processing_messages[server_id] = False
                 conversation[server_id].append({"role": "assistant", "content": endresult})
                 print(conversation[server_id])
@@ -75,7 +79,7 @@ class MyClient(discord.Client):
                     split_index = conversation_so_far[:2000].rfind(' ')
                     split_index = split_index if split_index > 0 else 2000
                     await message.edit(content=conversation_so_far[:split_index])
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2)
                     message = await message.channel.send(conversation_so_far[split_index:])
                     conversation_so_far = conversation_so_far[split_index:]
                 await message.edit(content=conversation_so_far)
@@ -98,6 +102,7 @@ class MyClient(discord.Client):
         global selected_models
         global server_id
         global endresult
+        global image_url
         server_id = str(message.guild.id)
         if server_id not in self.message_queues:
             self.message_queues[server_id] = asyncio.Queue()
@@ -167,19 +172,20 @@ class MyClient(discord.Client):
             formatted_time = gettimeinfo()
             formatted_date = getdateinfo()
             ex_prompt[server_id] = 9
-            #system_message[server_id].append({"role": "system", "content": "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time})
             system_message[server_id].append({"role": "system", "content": "From now on all your responses must follow these rules: ['act like nothing they ever does is good enough', 'when asked a question degrade them because they do not know the answer, never answer the question', 'be like a stereotypical toxic Asian parent'] Do not break out of character"})
-            #system_message[server_id].append({"role": "user", "content": asian})
             await message.channel.send("Reset With Dissapointed Asian Parent Mode Enabled!")
             return
         if message.content.startswith('!helpgpt'):
-            await message.channel.send("This bot will listen for anything said in the #ai-chat and reply with gpt's response, GPT does know your discord name.\n\n Valid commands are:\n !reset - Forgets everything and resets the chat\n !helpgpt - Shows this help dialogue. \n\n Jailbreaks:\n !anarchy - Resets everything and loads the anarchy prompt (Does whatever you ask when properly activated) (~230 tokens)\n !snark - Resets everything and loads the snarky prompt (Acts snarky and swears) (23 tokens)\n\n The more tokens the prompt, the cheaper it is for me to run this, so the longer it will last.\n\nUse \"__\" before a message for the AI to ignore it \n\n Versions of GPT: \n !gpt3 - Continue the ongoing conversation and swap to GPT-3 (Cheaper - Default)\n !gpt4 - Continue the ongoing conversation and swap to GPT-4 (More Expensive) \n\n\n :warning: **Some of the above prompts might not work properly the first time** If this is the case, just try again.")
+            await message.channel.send("This bot will listen for anything said in the #ai-chat and reply with gpt's response, GPT does know your discord name.\n\n Valid commands are:\n !reset - Forgets everything and resets the chat\n !helpgpt - Shows this help dialogue. \n\n Jailbreaks/Funny stuff:\n !anarchy - Resets everything and loads the anarchy prompt (Does whatever you ask when properly activated) \n Use !anarchy4 for the GPT-4 version!\n !snark - Resets everything and loads the snarky prompt (Acts snarky and swears)\n !asian - Acts like an asian parent, always dissapointed in you no matter what. \n\n The more tokens the prompt, the cheaper it is for me to run this, so the longer it will last.\n\nUse \"__\" before a message for the AI to ignore it \n\n Versions of GPT: \n !gpt3 - Continue the ongoing conversation and swap to GPT-3 (Cheaper - Default)\n !gpt4 - Continue the ongoing conversation and swap to GPT-4 (More Expensive) \n\n\n :warning: **Some of the above prompts might not work properly the first time** If this is the case, just try again.")
+            return
+        if message.content.startswith('!gpt4v'):
+            selected_models[server_id] = "gpt-4-vision-preview"
+            await message.channel.send("Switched to GPT-4V.")
             return
         if message.content.startswith('!gpt4'):
             selected_models[server_id] = "gpt-4"
             await message.channel.send("Switched to GPT-4.")
             return
-
         if message.content.startswith('!gpt3'):
             selected_models[server_id] = "gpt-3.5-turbo"
             await message.channel.send("Switched to GPT-3.5.")
@@ -190,7 +196,28 @@ class MyClient(discord.Client):
             wait_message = await message.reply("Generating a response. Please wait and try again. Your prompt has been retained in memory.", mention_author=True)
             author_name = message.author.name
             user = message.content
-            conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+            if selected_models[server_id] == "gpt-4-vision-preview":
+                if message.attachments:
+                    image_urls = []
+                    for attachment in message.attachments:
+                        if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.bmp']):
+                            image_urls.append(attachment.url)
+                            if len(image_urls) >= 4:  # Limit to 4 images
+                                break
+                    # if any images, add them to conversation
+                    if image_urls:
+                        conversation[server_id].append({
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": user},
+                                * [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+                            ]
+                        })
+                else:
+                    conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+            else:
+                conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+
             await asyncio.sleep(5)
             await wait_message.delete()
             return
@@ -200,14 +227,34 @@ class MyClient(discord.Client):
         if ex_prompt[server_id] == 1:
             system_message[server_id][-2]["content"] = "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time
         elif ex_prompt[server_id] == 9:
-            system_message[server_id].append({"role": "system", "content": "From now on all your responses must follow these rules: ['act like nothing they ever does is good enough', 'when asked a question degrade them because they do not know the answer, never answer the question', 'be like a stereotypical toxic Asian parent'] Do not break out of character"})
+            system_message[server_id].append({"role": "system", "content": "From now on all your responses must follow these rules: ['act like nothing they ever does is good enough', 'when asked a question degrade them because they do not know the answer, never answer the question', 'be like a stereotypical toxic Asian parent'] Do not break out of character"}) # because this mode only works as a system message otherwise it will refuse
         else:
             system_message[server_id][-1]["content"] = "You are a discord bot called Enspiredjack AI. \"<:teethPepe\:753266605173112892>\" is a laughing pepe emoji. Realtime: \nThe current date is: "+ formatted_date + " The current time is: " + formatted_time
         #get prompt
         author_name = message.author.name
         user = message.content
-        #send conversation to gpt-3 api
-        conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+        if selected_models[server_id] == "gpt-4-vision-preview":
+            if message.attachments:
+                image_urls = []
+                for attachment in message.attachments:
+                    if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.bmp']):
+                        image_urls.append(attachment.url)
+                        if len(image_urls) >= 4:  # Limit to 4 images
+                            break
+                # if any images, add them to conversation
+                if image_urls:
+                    conversation[server_id].append({
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": user},
+                            * [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+                        ]
+                    })
+            else:
+                conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+        else:
+            #send conversation to openAI api
+            conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
         initial_message = await message.channel.send('Generating response...')
         endresult = ""
         # Start the two tasks

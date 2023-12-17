@@ -1,12 +1,12 @@
 # IDFK_Discord_Bots
-All the bots running on the IDFK discord server that ive made  
+All the bots running on the IDFK discord server that I've made  
 ---
 These bots are very basic and just me messing about.  
 
 ## GPT bot  
 This bot gets every message from the server and replies to it, adding the conversation to the memory, configure how long you want the memory by changing the `MAX_CONVERSATION_LENGTH` to something else. Conversation does not include the system message, it will not be deleted. This is the single message respose version, it will send a message once openai's API has responded.  
 
-`!helpgpt` for help menu thing  
+`!helpgpt` for help menu  
 
 ## GPT bot stream  
 This is the same as above but it will send a message and then continuously edit that message until the response is fully added.  
@@ -22,7 +22,9 @@ Uses DALL-E 3 image api to generate images when someone says !generateimage [pro
 
 ## Prerequisits
 Make sure you have openai and discord installed via pip for AI related bots, however discord is still required for normal ones.
-`pip install openai discord`
+`pip install openai discord`  
 
-Get a API token at [OpenaAI](https://platform.openai.com)
+When creating and inviting the bot, make sure you select 'bot' and 'message.read' and in the 'Bot Permissions' area, select 'read messages/view channels' and 'send messages'  
+
+Get a API token at [OpenaAI](https://platform.openai.com)  
 Get discord bot + token at [Discord](https://discord.com/developers/applications)
