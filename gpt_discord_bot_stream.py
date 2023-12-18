@@ -3,6 +3,7 @@ import discord
 import datetime
 import asyncio
 from openai import AsyncOpenAI
+import tiktoken
 
 def split_string(string, chunk_size):
     return [string[i:i+chunk_size] for i in range(0, len(string), chunk_size)]
@@ -17,6 +18,16 @@ def getdateinfo():
     formatted_date = now.strftime("%Y-%m-%d")
     return formatted_date
 
+def count_tokens():
+    num_tokens = 0
+    global conversation
+    global server_id
+    encoding = tiktoken.get_encoding("cl100k_base")
+    for message in conversation[server_id]:
+        num_tokens += len(encoding.encode(message['content']))
+    return num_tokens
+
+
 class MyClient(discord.Client):
 
     def __init__(self, *args, **kwargs):
@@ -24,6 +35,7 @@ class MyClient(discord.Client):
         self.message_queues = {}
         self.processing_messages = {}
         self.openai_client = AsyncOpenAI(api_key='OPENAI-API-KEY')
+        
 
     async def fetch_chunks(self, server_id):
         global conversation
@@ -32,22 +44,18 @@ class MyClient(discord.Client):
         global error
         self.processing_messages[server_id] = True
         self.message_queues[server_id] = asyncio.Queue()
+        if selected_models[server_id] == "gpt-4-vision-preview": # if this isnt set for gpt4v, the max it will output will be 16 tokens for some reason but the rest it's fine
+            max_tokens = 4000
+        else:
+            max_tokens = None
         try:
             chat_completions = await self.openai_client.chat.completions.create(
                 model=selected_models[server_id],
                 messages=system_message[server_id] + conversation[server_id],
                 stream=True,
-                max_tokens=4000,
+                max_tokens=max_tokens,
             )
-        except AsyncOpenAI.APIConnectionError as e:
-            error = f"Error: {str(e)}"
-            print(error)
-            return
-        except AsyncOpenAI.RateLimitError as e:
-            error = f"Error: {str(e)}"
-            print(error)
-            return
-        except AsyncOpenAI.APIStatusError as e:
+        except Exception as e:
             error = f"Error: {str(e)}"
             print(error)
             return
@@ -263,8 +271,10 @@ class MyClient(discord.Client):
         # Wait for both tasks to complete
         await fetch_task
         await update_task
-        if len(conversation[server_id]) > MAX_CONVERSATION_LENGTH:
-            conversation[server_id] = conversation[server_id][-MAX_CONVERSATION_LENGTH:]
+        max_tokens = token_limits.get(selected_models[server_id], "gpt-3.5-turbo")  # Default to gpt-3.5-turbo if model not found
+        if count_tokens() > max_tokens:
+            while count_tokens(conversation[server_id]) > max_tokens and len(conversation[server_id]) > 0:
+                conversation[server_id].pop(0)  # Remove the oldest message
 
 # Initialise the array for the API calls globally
 conversation = {}
@@ -294,7 +304,11 @@ def save_chosen_channels(chosen_channels):
 chosen_channels = load_chosen_channels()
 
 # Maximum number of messages to keep in conversation history (still doesn't account for long messages and may go over the token limit)
-MAX_CONVERSATION_LENGTH = 20
+token_limits = {
+    'gpt-3.5-turbo': 3500,
+    'gpt-4': 7500,
+    'gpt-4-vision-preview': 8000,
+}
 
 # Discord stuff
 intents = discord.Intents.default()
