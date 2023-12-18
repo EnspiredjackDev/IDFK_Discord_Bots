@@ -35,7 +35,6 @@ class MyClient(discord.Client):
         self.message_queues = {}
         self.processing_messages = {}
         self.openai_client = AsyncOpenAI(api_key='OPENAI-API-KEY')
-        
 
     async def fetch_chunks(self, server_id):
         global conversation
@@ -78,20 +77,20 @@ class MyClient(discord.Client):
             while not self.message_queues[server_id].empty():
                 conversation_so_far += await self.message_queues[server_id].get()
             if conversation_so_far:
-                if error:
-                    await message.channel.send(error)
-                    self.processing_messages[server_id] = False
-                    return
                 # Split the content into chunks of 2000 characters each
                 while len(conversation_so_far) > 2000:
                     split_index = conversation_so_far[:2000].rfind(' ')
                     split_index = split_index if split_index > 0 else 2000
                     await message.edit(content=conversation_so_far[:split_index])
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(1)
                     message = await message.channel.send(conversation_so_far[split_index:])
                     conversation_so_far = conversation_so_far[split_index:]
                 await message.edit(content=conversation_so_far)
             await asyncio.sleep(1)  # to avoid hitting Discord's rate limit
+            if error:
+                    await message.edit(content=error)
+                    self.processing_messages[server_id] = False
+                    return
 
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -110,7 +109,6 @@ class MyClient(discord.Client):
         global selected_models
         global server_id
         global endresult
-        global image_url
         server_id = str(message.guild.id)
         if server_id not in self.message_queues:
             self.message_queues[server_id] = asyncio.Queue()
@@ -303,7 +301,7 @@ def save_chosen_channels(chosen_channels):
 # Load if able
 chosen_channels = load_chosen_channels()
 
-# Maximum number of messages to keep in conversation history (still doesn't account for long messages and may go over the token limit)
+# Maximum number of tokens to keep in conversation history (see https://openai.com/pricing for details)
 token_limits = {
     'gpt-3.5-turbo': 3500,
     'gpt-4': 7500,
