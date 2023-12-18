@@ -156,12 +156,16 @@ class MyClient(discord.Client):
         else:
             #send conversation to openAI api
             conversation[server_id].append({"role": "user", "content": author_name + ": " + user})
+        if selected_models[server_id] == "gpt-4-vision-preview": # if this isnt set for gpt4v, the max it will output will be 16 tokens for some reason but the rest it's fine
+            max_tokens = 4000
+        else:
+            max_tokens = None
         try:
             async with message.channel.typing():
                 completion = await self.openai_client.chat.completions.create(
                     model=selected_models[server_id],
                     messages=system_message[server_id] + conversation[server_id],
-                    max_tokens=4000
+                    max_tokens=max_tokens
                 )
         except AsyncOpenAI.APIConnectionError as e:
             await message.channel.send(f"Error: {str(e)}")
