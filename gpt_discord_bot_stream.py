@@ -4,6 +4,9 @@ import datetime
 import asyncio
 from openai import AsyncOpenAI
 import tiktoken
+import requests
+from io import BytesIO
+import re
 
 def split_string(string, chunk_size):
     return [string[i:i+chunk_size] for i in range(0, len(string), chunk_size)]
@@ -34,13 +37,42 @@ class MyClient(discord.Client):
         super().__init__(*args, **kwargs)
         self.message_queues = {}
         self.processing_messages = {}
-        self.openai_client = AsyncOpenAI(api_key='OPENAI-API-KEY')
+        self.openai_client = AsyncOpenAI(api_key=apikey)
 
     async def fetch_chunks(self, server_id):
+
+        async def execute_genimage(self, prompt):
+            match = re.search(r'\{.*\}', prompt, re.DOTALL)
+            if match:
+                json_str = match.group()
+                command_dict = json.loads(json_str)
+                command_str = command_dict.get("prompt")
+                if command_str:
+                    openai_client = AsyncOpenAI(api_key=apikey)
+                    response = await openai_client.images.generate(
+                        model="dall-e-3",
+                        prompt=prompt,
+                        size="1024x1024",
+                        quality="standard",
+                        n=1,
+                    )
+                    if response.data and len(response.data) > 0:
+                        image_url = response.data[0].url
+                        result = "image successfully generated! IT IS DISPLAYED TO THEM ALREADY, YOU DO NOT NEED TO DO ANYTHING ELSE, DO NOT MAKE ANOTHER ONE. say something like 'Sure! Here is the image requested:' and maybe another comment if necessary. do not say anything like '![Fox in a Frosty Forest](generated_image)' as it is not necessary"
+                        conversation[server_id].append({"role": "function", "content": f"result: {result}", "name": "generate_image"})
+                        return image_url
+                else:
+                    result = "No prompt found in AI output, please try again."
+                    conversation.append({"role": "function", "content": f"prompt: {command_str} result: {result}", "name": "generate_image"})
+
         global conversation
         global system_message
         global endresult
         global error
+        global imagestuff
+        global functions
+        function = ""
+        function_call_value = None
         self.processing_messages[server_id] = True
         self.message_queues[server_id] = asyncio.Queue()
         if selected_models[server_id] == "gpt-4-vision-preview": # if this isnt set for gpt4v, the max it will output will be 16 tokens for some reason but the rest it's fine
@@ -53,25 +85,42 @@ class MyClient(discord.Client):
                 messages=system_message[server_id] + conversation[server_id],
                 stream=True,
                 max_tokens=max_tokens,
+                functions=functions
             )
         except Exception as e:
             error = f"Error: {str(e)}"
             print(error)
             return
         async for chunk in chat_completions:
+
+            if hasattr(chunk.choices[0].delta, 'function_call') and chunk.choices[0].delta.function_call:
+                    function_call_data = chunk.choices[0].delta.function_call
+                    if function_call_value is None: 
+                        function_call_value = function_call_data.name
+                        print("Function call name:", function_call_value)  # Debugging print
+                    else:
+                        function += function_call_data.arguments
+                        print("Function call arguments:", function)  # Debugging print
+
             content = chunk.choices[0].delta.content or ""
             if content:
                 endresult += content
                 await self.message_queues[server_id].put(content)
             finish_reason = chunk.choices[0].finish_reason
+
             if finish_reason == "stop" or finish_reason == "length":
                 self.processing_messages[server_id] = False
                 conversation[server_id].append({"role": "assistant", "content": endresult})
                 print(conversation[server_id])
 
+            if finish_reason == "function_call":
+                if function_call_value == "generate_image":
+                        imagestuff = await execute_genimage(self, function)
+
     async def update_message(self, message, server_id):
         global conversation
         global system_message
+        global imagestuff
         conversation_so_far = ""
         while self.processing_messages[server_id] or not self.message_queues[server_id].empty():
             while not self.message_queues[server_id].empty():
@@ -91,6 +140,14 @@ class MyClient(discord.Client):
                     await message.edit(content=error)
                     self.processing_messages[server_id] = False
                     return
+            if imagestuff:
+                if isinstance(imagestuff, str):
+                    if imagestuff.startswith("https://"):
+                        image_data = requests.get(imagestuff).content  
+                        image_file = discord.File(BytesIO(image_data), filename="generated_image.png")
+                        await message.channel.send(file=image_file)
+                        imagestuff = None
+                        asyncio.create_task(self.fetch_chunks(server_id))
 
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -182,7 +239,7 @@ class MyClient(discord.Client):
             await message.channel.send("Reset With Dissapointed Asian Parent Mode Enabled!")
             return
         if message.content.startswith('!helpgpt'):
-            await message.channel.send("This bot will listen for anything said in the #ai-chat and reply with gpt's response, GPT does know your discord name.\n\n Valid commands are:\n !reset - Forgets everything and resets the chat\n !helpgpt - Shows this help dialogue. \n\n Jailbreaks/Funny stuff:\n !anarchy - Resets everything and loads the anarchy prompt (Does whatever you ask when properly activated) \n Use !anarchy4 for the GPT-4 version!\n !snark - Resets everything and loads the snarky prompt (Acts snarky and swears)\n !asian - Acts like an asian parent, always dissapointed in you no matter what. \n\n The more tokens the prompt, the cheaper it is for me to run this, so the longer it will last.\n\nUse \"__\" before a message for the AI to ignore it \n\n Versions of GPT: \n !gpt3 - Continue the ongoing conversation and swap to GPT-3 (Cheaper - Default)\n !gpt4 - Continue the ongoing conversation and swap to GPT-4 (More Expensive) \n\n\n :warning: **Some of the above prompts might not work properly the first time** If this is the case, just try again.")
+            await message.channel.send("This bot will listen for anything said in the #ai-chat and reply with gpt's response, GPT does know your discord name.\n\n Valid commands are:\n !reset - Forgets everything and resets the chat\n !helpgpt - Shows this help dialogue. \n\n Jailbreaks/Funny stuff:\n !anarchy - Resets everything and loads the anarchy prompt (Does whatever you ask when properly activated) \n Use !anarchy4 for the GPT-4 version!\n !snark - Resets everything and loads the snarky prompt (Acts snarky and swears)\n !asian - Acts like an asian parent, always disappointed in you no matter what. \n\n Use \"__\" before a message for the AI to ignore it \n\n Versions of GPT: \n !gpt3 - Continue the ongoing conversation and swap to GPT-3 (Cheaper - Default)\n !gpt4 - Continue the ongoing conversation and swap to GPT-4 (More Expensive) \n !gpt4v - GPT-4-Vision the mulimodel version of GPT-4 with image recognition. \n All models have access to the image generation function, but its recommended to use GPT-4 for better quality responses.\n\n\n :warning: **Some of the above prompts might not work properly the first time** If this is the case, just try again.")
             return
         if message.content.startswith('!gpt4v'):
             selected_models[server_id] = "gpt-4-vision-preview"
@@ -286,6 +343,7 @@ server_id = ""
 conversation_so_far = ""
 endresult = ""
 error = ""
+imagestuff = None
 
 def load_chosen_channels():
     try:
@@ -308,6 +366,23 @@ token_limits = {
     'gpt-4-vision-preview': 8000,
 }
 
+# Functions
+functions = [
+    {
+        "name": "generate_image",
+        "description": "tells dalle3 API to generate an image based on the prompt you give it, remember to be very creative and specific, because that gives better results",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "the prompt to dalle3, the image will be generated based off of this."},
+            },
+            "required": ["prompt"],
+        },
+    },
+]
+
+# OpenAI api key
+apikey = "OPENAI-API-KEY"
 # Discord stuff
 intents = discord.Intents.default()
 intents.message_content = True
