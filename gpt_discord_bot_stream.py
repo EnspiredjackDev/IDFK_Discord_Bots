@@ -42,6 +42,7 @@ class MyClient(discord.Client):
     async def fetch_chunks(self, server_id):
 
         async def execute_genimage(self, prompt):
+            global error
             match = re.search(r'\{.*\}', prompt, re.DOTALL)
             if match:
                 json_str = match.group()
@@ -49,16 +50,20 @@ class MyClient(discord.Client):
                 command_str = command_dict.get("prompt")
                 if command_str:
                     openai_client = AsyncOpenAI(api_key=apikey)
-                    response = await openai_client.images.generate(
-                        model="dall-e-3",
-                        prompt=prompt,
-                        size="1024x1024",
-                        quality="standard",
-                        n=1,
-                    )
+                    try:
+                        response = await openai_client.images.generate(
+                            model="dall-e-3",
+                            prompt=prompt,
+                            size="1024x1024",
+                            quality="standard",
+                            n=1,
+                        )
+                    except Exception as e:
+                        print(f"Error (DALLE-3): {e}")
+                        error = e
                     if response.data and len(response.data) > 0:
                         image_url = response.data[0].url
-                        result = "image successfully generated! IT IS DISPLAYED TO THEM ALREADY, YOU DO NOT NEED TO DO ANYTHING ELSE, DO NOT MAKE ANOTHER ONE. say something like 'Sure! Here is the image requested:' and maybe another comment if necessary. do not say anything like '![Fox in a Frosty Forest](generated_image)' as it is not necessary"
+                        result = "image successfully generated! It is displayed to them below."
                         conversation[server_id].append({"role": "function", "content": f"result: {result}", "name": "generate_image"})
                         return image_url
                 else:
@@ -77,8 +82,23 @@ class MyClient(discord.Client):
         self.message_queues[server_id] = asyncio.Queue()
         if selected_models[server_id] == "gpt-4-vision-preview": # if this isnt set for gpt4v, the max it will output will be 16 tokens for some reason but the rest it's fine
             max_tokens = 4000
+            functions = None
         else:
             max_tokens = None
+            # had to move functions up here because of GPT-4V not having support for them (or was the least effort way anyway)
+            functions = [
+            {
+                "name": "generate_image",
+                "description": "tells dalle3 API to generate an image based on the prompt you give it, remember to be very creative and specific, because that gives better results",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "the prompt to dalle3, the image will be generated based off of this."},
+                    },
+                    "required": ["prompt"],
+                },
+            },
+        ]
         try:
             chat_completions = await self.openai_client.chat.completions.create(
                 model=selected_models[server_id],
@@ -97,10 +117,8 @@ class MyClient(discord.Client):
                     function_call_data = chunk.choices[0].delta.function_call
                     if function_call_value is None: 
                         function_call_value = function_call_data.name
-                        print("Function call name:", function_call_value)  # Debugging print
                     else:
                         function += function_call_data.arguments
-                        print("Function call arguments:", function)  # Debugging print
 
             content = chunk.choices[0].delta.content or ""
             if content:
@@ -365,21 +383,6 @@ token_limits = {
     'gpt-4': 7500,
     'gpt-4-vision-preview': 8000,
 }
-
-# Functions
-functions = [
-    {
-        "name": "generate_image",
-        "description": "tells dalle3 API to generate an image based on the prompt you give it, remember to be very creative and specific, because that gives better results",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "prompt": {"type": "string", "description": "the prompt to dalle3, the image will be generated based off of this."},
-            },
-            "required": ["prompt"],
-        },
-    },
-]
 
 # OpenAI api key
 apikey = "OPENAI-API-KEY"
