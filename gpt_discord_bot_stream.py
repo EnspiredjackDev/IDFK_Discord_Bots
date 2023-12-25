@@ -43,6 +43,7 @@ class MyClient(discord.Client):
 
         async def execute_genimage(self, prompt):
             global error
+            response = None
             match = re.search(r'\{.*\}', prompt, re.DOTALL)
             if match:
                 json_str = match.group()
@@ -53,7 +54,7 @@ class MyClient(discord.Client):
                     try:
                         response = await openai_client.images.generate(
                             model="dall-e-3",
-                            prompt=prompt,
+                            prompt=command_str,
                             size="1024x1024",
                             quality="standard",
                             n=1,
@@ -61,11 +62,12 @@ class MyClient(discord.Client):
                     except Exception as e:
                         print(f"Error (DALLE-3): {e}")
                         error = e
-                    if response.data and len(response.data) > 0:
-                        image_url = response.data[0].url
-                        result = "image successfully generated! It is displayed to them below."
-                        conversation[server_id].append({"role": "function", "content": f"result: {result}", "name": "generate_image"})
-                        return image_url
+                    if response:
+                        if response.data and len(response.data) > 0:
+                            image_url = response.data[0].url
+                            result = "image successfully generated! It is displayed to them below."
+                            conversation[server_id].append({"role": "function", "content": f"result: {result}", "name": "generate_image"})
+                            return image_url
                 else:
                     result = "No prompt found in AI output, please try again."
                     conversation.append({"role": "function", "content": f"prompt: {command_str} result: {result}", "name": "generate_image"})
@@ -139,6 +141,7 @@ class MyClient(discord.Client):
         global conversation
         global system_message
         global imagestuff
+        global error
         conversation_so_far = ""
         while self.processing_messages[server_id] or not self.message_queues[server_id].empty():
             while not self.message_queues[server_id].empty():
@@ -155,8 +158,9 @@ class MyClient(discord.Client):
                 await message.edit(content=conversation_so_far)
             await asyncio.sleep(1)  # to avoid hitting Discord's rate limit
             if error:
-                    await message.edit(content=error)
+                    await message.edit(content=f"{error} \n\n The AI is not aware of this error!")
                     self.processing_messages[server_id] = False
+                    error = ""
                     return
             if imagestuff:
                 if isinstance(imagestuff, str):
