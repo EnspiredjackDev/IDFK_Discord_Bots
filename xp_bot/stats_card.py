@@ -61,6 +61,7 @@ def create_stats_card(
     yearly_distribution: Dict[int, int],
     hourly_distribution: Dict[int, int],
     daily_distribution: Dict[int, int],
+    voice_stats: Optional[Dict] = None,
 ) -> io.BytesIO:
     """
     Create a statistics card image.
@@ -171,6 +172,15 @@ def create_stats_card(
     draw.text((left_col_x, y_offset), "Avg Messages/Day", font=font_small, fill=subtext_color)
     y_offset += 30 * scale
     draw.text((left_col_x, y_offset), f"{avg_messages_per_day:.1f}", font=font_normal, fill=text_color)
+    
+    # Voice statistics (if available)
+    if voice_stats and voice_stats.get('total_time', 0) > 0:
+        from xp_bot.voice_tracking import format_duration
+        y_offset += line_height
+        draw.text((left_col_x, y_offset), "Voice Time", font=font_small, fill=subtext_color)
+        y_offset += 30 * scale
+        voice_time_str = format_duration(voice_stats['total_time'])
+        draw.text((left_col_x, y_offset), voice_time_str, font=font_normal, fill=text_color)
     
     # Right column - Most active times
     y_offset = stats_y

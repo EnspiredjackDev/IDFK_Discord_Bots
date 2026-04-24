@@ -63,6 +63,81 @@ async def init_db(db_path: str):
             FOREIGN KEY (giveaway_id) REFERENCES giveaways(id) ON DELETE CASCADE
         )
         """)
+        # Voice channel tracking tables
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS voice_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TEXT NOT NULL,
+            left_at TEXT,
+            duration_seconds INTEGER,
+            UNIQUE(guild_id, channel_id, user_id, joined_at)
+        )
+        """)
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS voice_companions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            companion_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            session_start TEXT NOT NULL,
+            session_end TEXT,
+            duration_seconds INTEGER
+        )
+        """)
+        # Create indexes for better query performance
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_voice_sessions_user 
+        ON voice_sessions(guild_id, user_id)
+        """)
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_voice_sessions_channel 
+        ON voice_sessions(guild_id, channel_id)
+        """)
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_voice_companions_user 
+        ON voice_companions(guild_id, user_id)
+        """)
+        # Voting tables
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            message_id INTEGER NOT NULL,
+            question TEXT NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            ended INTEGER NOT NULL DEFAULT 0,
+            message_count INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS vote_reminders (
+            vote_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            reminded_at TEXT NOT NULL,
+            PRIMARY KEY (vote_id, user_id),
+            FOREIGN KEY (vote_id) REFERENCES votes(id) ON DELETE CASCADE
+        )
+        """)
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS vote_early_participants (
+            vote_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            participated_at TEXT NOT NULL,
+            PRIMARY KEY (vote_id, user_id),
+            FOREIGN KEY (vote_id) REFERENCES votes(id) ON DELETE CASCADE
+        )
+        """)
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_votes_active 
+        ON votes(guild_id, channel_id, ended)
+        """)
         await db.commit()
 
 async def get_xp(db, guild_id: int, user_id: int) -> int:

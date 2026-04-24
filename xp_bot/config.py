@@ -31,3 +31,8 @@ ARCHIVE_BOT_MESSAGES = False      # set True if you want bot messages archived
 # Hate speech detection settings
 HATE_SPEECH_DETECTION_ENABLED = False  # Set to True to enable automatic hate speech detection
 HATE_SPEECH_THRESHOLD = 0.80  # Confidence threshold (0.0-1.0) for triggering warnings
+
+# Voice XP settings
+VOICE_XP_ENABLED = True  # Set to True to award XP for time spent in voice channels
+VOICE_XP_PER_MINUTE = 10  # XP awarded per minute in voice channel
+VOICE_XP_MIN_DURATION = 30  # Minimum seconds in VC to earn XP (prevents abuse from quick joins/leaves)

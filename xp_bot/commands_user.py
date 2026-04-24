@@ -543,6 +543,7 @@ async def stats(ctx: commands.Context, user_input: Optional[str] = None):
                 yearly_distribution=stats['yearly_distribution'],
                 hourly_distribution=stats['hourly_distribution'],
                 daily_distribution=stats['daily_distribution'],
+                voice_stats=stats.get('voice_stats'),
             )
             
             # Send as file

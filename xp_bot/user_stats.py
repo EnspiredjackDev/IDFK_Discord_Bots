@@ -122,6 +122,14 @@ async def gather_user_stats(guild_id: int, user_id: int) -> Optional[dict]:
     # Get top channels
     top_channels = sorted(channels_used.items(), key=lambda x: x[1], reverse=True)[:5]
     
+    # Get voice statistics
+    voice_stats = None
+    try:
+        from xp_bot.voice_tracking import get_user_voice_stats
+        voice_stats = await get_user_voice_stats(guild_id, user_id)
+    except Exception as e:
+        print(f"[user_stats] Failed to get voice stats: {e}")
+    
     return {
         'first_message_date': first_message,
         'total_messages': total_messages,
@@ -137,6 +145,7 @@ async def gather_user_stats(guild_id: int, user_id: int) -> Optional[dict]:
         'monthly_distribution': dict(monthly_distribution),
         'yearly_distribution': dict(yearly_distribution),
         'top_channels': top_channels,
+        'voice_stats': voice_stats,
     }
 
 def format_stats_message(stats: dict, username: str) -> str:
