@@ -23,8 +23,11 @@ from xp_bot import commands_semantic
 from xp_bot import commands_random_video
 from xp_bot import commands_image
 from xp_bot import commands_giveaway
+from xp_bot import commands_voice
+from xp_bot import commands_voting
 from xp_bot.semantic import index_message, detect_hate_speech
 from xp_bot.commands_random_video import video_config
+from xp_bot import voice_tracking
 
 # Bot setup
 INTENTS = discord.Intents.default()
@@ -108,6 +111,9 @@ async def on_message(message: discord.Message):
                 )
             except Exception as e:
                 print(f"[security] Error during auto-ban: {e}")
+
+    # ---- Vote reminders (check before processing other things) ----
+    await commands_voting.check_and_send_reminder(message, bot)
 
     # ---- Word counters (check before processing commands) ----
     if not message.author.bot and message.content:
@@ -278,6 +284,58 @@ async def on_message_delete(message: discord.Message):
     except Exception as e:
         print(f"[archive] Failed to write delete event {message.id}: {e}")
 
+@bot.event
+async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    """Track voice channel joins, leaves, and moves."""
+    guild_id = member.guild.id
+    user_id = member.id
+    
+    # User left voice completely
+    if before.channel is not None and after.channel is None:
+        try:
+            duration, old_level, new_level = await voice_tracking.user_left_voice(guild_id, user_id)
+            print(f"[voice] {member.name} left {before.channel.name} (duration: {duration}s)")
+            
+            # Check for level up
+            if new_level > old_level:
+                # Try to send level up message in a text channel
+                # Look for a general/chat channel, or use the first available text channel
+                text_channel = None
+                for channel in member.guild.text_channels:
+                    if channel.name.lower() in ['general', 'chat', 'bot-commands', 'leveling']:
+                        text_channel = channel
+                        break
+                
+                if not text_channel and member.guild.text_channels:
+                    text_channel = member.guild.text_channels[0]
+                
+                if text_channel:
+                    try:
+                        await text_channel.send(
+                            f"{member.mention} leveled up to **{new_level}** from voice time!"
+                        )
+                    except Exception as e:
+                        print(f"[voice] Failed to send level up message: {e}")
+        except Exception as e:
+            print(f"[voice] Error tracking leave: {e}")
+    
+    # User joined voice
+    elif before.channel is None and after.channel is not None:
+        try:
+            await voice_tracking.user_joined_voice(guild_id, user_id, after.channel.id)
+            print(f"[voice] {member.name} joined {after.channel.name}")
+        except Exception as e:
+            print(f"[voice] Error tracking join: {e}")
+    
+    # User moved between channels
+    elif before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
+        try:
+            await voice_tracking.user_moved_voice(guild_id, user_id, before.channel.id, after.channel.id)
+            print(f"[voice] {member.name} moved from {before.channel.name} to {after.channel.name}")
+        except Exception as e:
+            print(f"[voice] Error tracking move: {e}")
+
+
 # ----------------------------
 # Help Command (Programmatic)
 # ----------------------------
@@ -328,9 +386,16 @@ COMMAND_CATEGORIES = {
     "video_add": {"category": "⚙️ Admin - Video Commands", "admin": True},
     "video_remove": {"category": "⚙️ Admin - Video Commands", "admin": True},
     "pixel": {"category": "🖼️ Image Analysis", "admin": False},
+    "voicestats": {"category": "Voice Statistics", "admin": False},
+    "vcstats": {"category": "Voice Statistics", "admin": False},
+    "voiceleaderboard": {"category": "Voice Statistics", "admin": False},
+    "voiceleaderboardtext": {"category": "Voice Statistics", "admin": False},
+    "whoisinvc": {"category": "Voice Statistics", "admin": False},
     "giveaway": {"category": "⚙️ Admin - Giveaways", "admin": True},
     "giveaway_end": {"category": "⚙️ Admin - Giveaways", "admin": True},
     "giveaway_list": {"category": "⚙️ Admin - Giveaways", "admin": True},
+    "vote": {"category": "📊 Voting", "admin": False},
+    "endvote": {"category": "📊 Voting", "admin": False},
 }
 
 def get_command_signature(cmd: commands.Command) -> str:
@@ -516,14 +581,16 @@ async def bot_help(ctx: commands.Context, *, command_name: str = None):
         
         # Add categories to embed in a specific order
         category_order = [
-            "🏆 XP & Ranking",
-            "📊 User Stats",
-            "📊 Channel Stats",
-            "📜 Message Archive",
-            "🔢 Word Counters",
-            "🔍 Semantic Search",
-            "🎬 Random Videos",
-            "🖼️ Image Analysis",
+            "XP & Ranking",
+            "User Stats",
+            "Channel Stats",
+            "Message Archive",
+            "Word Counters",
+            "Voting",
+            "Semantic Search",
+            "Random Videos",
+            "Image Analysis",
+            "Voice Statistics",
             "Other"
         ]
         
@@ -568,6 +635,8 @@ async def setup_commands():
     commands_semantic.setup(bot)
     commands_random_video.setup(bot)
     commands_image.setup(bot)
+    commands_voice.setup(bot)
+    commands_voting.setup(bot)
     await commands_giveaway.setup(bot)
 
 # ----------------------------
